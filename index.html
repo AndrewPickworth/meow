@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Click 4 Chaos Kittens</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      height: 100vh;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #fffbf0, #ffe4f3, #ffd3e2);
+      position: relative;
+      cursor: crosshair;
+    }
+
+    .title-banner {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 16px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 20;
+      font-size: 14px;
+      pointer-events: none;
+    }
+
+    .title-banner strong {
+      font-weight: 700;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+
+    .kitten {
+      position: absolute;
+      font-size: 40px;
+      will-change: transform;
+      filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.2));
+      pointer-events: none;
+      transform: translate(-50%, -50%); /* center on (left, top) */
+    }
+
+    .hint {
+      position: absolute;
+      bottom: 12px;
+      right: 16px;
+      font-size: 12px;
+      color: rgba(0, 0, 0, 0.6);
+      background: rgba(255, 255, 255, 0.75);
+      padding: 6px 10px;
+      border-radius: 999px;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+      z-index: 20;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="title-banner">
+    <span>🐾</span>
+    <div>
+      <strong>Click 4 Chaos Kittens</strong><br />
+      <span class="subtitle">Hold to unleash maximum meow</span>
+    </div>
+  </div>
+
+  <div class="hint">Click or hold to spawn kittens 🐱</div>
+
+  <script>
+    const kittenEmojis = ["🐱", "😺", "😸", "😹", "😻", "😼"];
+    const kittens = [];
+
+    let lastTime = null;
+    let isMouseDown = false;
+    let lastPointerX = window.innerWidth / 2;
+    let lastPointerY = window.innerHeight / 2;
+    let spawnAccumulator = 0;
+    const HOLD_SPAWN_PERIOD = 80; // ms between spawn bursts while holding
+
+    function spawnKittenAt(x, y) {
+      const el = document.createElement("div");
+      el.className = "kitten";
+
+      // Random emoji
+      el.textContent = kittenEmojis[Math.floor(Math.random() * kittenEmojis.length)];
+
+      // Random size
+      const size = 30 + Math.random() * 30;
+      el.style.fontSize = size + "px";
+
+      // Initial position
+      el.style.left = x + "px";
+      el.style.top = y + "px";
+
+      document.body.appendChild(el);
+
+      // Random starting direction & speed (wander)
+      const angle = Math.random() * Math.PI * 2;
+      const wanderSpeed = 0.15 + Math.random() * 0.25; // px per ms
+
+      const kitten = {
+        el,
+        x,
+        y,
+        vx: Math.cos(angle) * wanderSpeed,
+        vy: Math.sin(angle) * wanderSpeed,
+        age: 0,
+        wanderTime: 400 + Math.random() * 600, // how long it wanders before committing right
+        baseSpeed: 0.18 + Math.random() * 0.15, // final rightward speed
+        life: 0
+      };
+
+      kittens.push(kitten);
+    }
+
+    function spawnBurst(x, y, count) {
+      for (let i = 0; i < count; i++) {
+        spawnKittenAt(
+          x + (Math.random() * 16 - 8), // small random offset so they don't overlap perfectly
+          y + (Math.random() * 16 - 8)
+        );
+      }
+    }
+
+    function tick(timestamp) {
+      if (!lastTime) lastTime = timestamp;
+      const dt = timestamp - lastTime; // ms
+      lastTime = timestamp;
+
+      // Update kitten physics
+      for (let i = kittens.length - 1; i >= 0; i--) {
+        const k = kittens[i];
+        k.age += dt;
+        k.life += dt;
+
+        if (k.age < k.wanderTime) {
+          // Wander phase: random-ish jitter in direction
+          const currentAngle = Math.atan2(k.vy, k.vx);
+          const speed = Math.hypot(k.vx, k.vy);
+          const jitter = (Math.random() - 0.5) * 0.4; // radians
+          const newAngle = currentAngle + jitter * (dt / 200);
+
+          k.vx = Math.cos(newAngle) * speed;
+          k.vy = Math.sin(newAngle) * speed;
+        } else {
+          // Settle and move to the right
+          const targetVx = k.baseSpeed;
+          // Smoothly blend toward target rightward speed
+          k.vx += (targetVx - k.vx) * 0.02 * (dt / 16);
+          // Dampen vertical motion so it flattens out
+          k.vy *= 0.9;
+        }
+
+        // Integrate position
+        k.x += k.vx * dt;
+        k.y += k.vy * dt;
+
+        k.el.style.left = k.x + "px";
+        k.el.style.top = k.y + "px";
+
+        // Remove kittens that are far off-screen or too old
+        if (
+          k.x > window.innerWidth + 150 ||
+          k.x < -150 ||
+          k.y < -150 ||
+          k.y > window.innerHeight + 150 ||
+          k.life > 20000
+        ) {
+          k.el.remove();
+          kittens.splice(i, 1);
+        }
+      }
+
+      // While holding mouse, spam spawn kittens at pointer
+      if (isMouseDown) {
+        spawnAccumulator += dt;
+        while (spawnAccumulator >= HOLD_SPAWN_PERIOD) {
+          spawnBurst(lastPointerX, lastPointerY, 2);
+          spawnAccumulator -= HOLD_SPAWN_PERIOD;
+        }
+      }
+
+      requestAnimationFrame(tick);
+    }
+
+    // Single clicks: big burst at click location
+    document.addEventListener("click", (event) => {
+      spawnBurst(event.clientX, event.clientY, 6);
+    });
+
+    // Holding: continuous spawning
+    document.addEventListener("mousedown", (event) => {
+      if (event.button !== 0) return; // left click only
+      isMouseDown = true;
+      lastPointerX = event.clientX;
+      lastPointerY = event.clientY;
+      spawnAccumulator = 0;
+    });
+
+    document.addEventListener("mouseup", () => {
+      isMouseDown = false;
+    });
+
+    document.addEventListener("mouseleave", () => {
+      isMouseDown = false;
+    });
+
+    document.addEventListener("mousemove", (event) => {
+      if (isMouseDown) {
+        lastPointerX = event.clientX;
+        lastPointerY = event.clientY;
+      }
+    });
+
+    // Start animation loop
+    requestAnimationFrame(tick);
+
+    // Optional: a few starter kittens
+    window.addEventListener("load", () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      for (let i = 0; i < 8; i++) {
+        spawnKittenAt(Math.random() * w, Math.random() * h);
+      }
+    });
+  </script>
+</body>
+</html>
